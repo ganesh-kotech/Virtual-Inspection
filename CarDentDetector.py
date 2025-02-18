@@ -1,33 +1,54 @@
-import cv2
-import math
-import cvzone
 import os
+import sys
+import cv2
+import json
+import numpy as np
 from ultralytics import YOLO
 
-# Load YOLO model with custom weights
+# Load YOLO model
 yolo_model = YOLO("Weights/best.pt")
 
+# Define class names
+# class_labels = [
+#     'Bodypanel-Dent', 'Front-Windscreen-Damage', 'Headlight-Damage',
+#     'Rear-windscreen-Damage', 'RunningBoard-Dent', 'Sidemirror-Damage',
+#     'Signlight-Damage', 'Taillight-Damage', 'bonnet-dent', 'boot-dent',
+#     'doorouter-dent', 'fender-dent', 'front-bumper-dent', 'pillar-dent',
+#     'quaterpanel-dent', 'rear-bumper-dent', 'roof-dent'
+# ]
+
+# Get image path from command line argument
+image_path = sys.argv[1]
+
 # Load the image
-image_path = "Media/dent1.jpg"
 img = cv2.imread(image_path)
 
 # Perform object detection
 results = yolo_model(img)
 
-# Loop through the detections and draw bounding boxes
+detections = []
+target_class='damage'
+# Loop through detections and store results
 for r in results:
     boxes = r.boxes
     for box in boxes:
         x1, y1, x2, y2 = box.xyxy[0]
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
 
-        w, h = x2 - x1, y2 - y1
-        
-        conf = math.ceil((box.conf[0] * 100)) / 100
+        conf = round(float(box.conf[0]), 2)
+        cls = int(box.cls[0])
 
         if conf > 0.3:
-            cvzone.cornerRect(img, (x1, y1, w, h), t=2)
-            cvzone.putTextRect(img, f'Damage {conf}', (x1, y1 - 10), scale=0.8, thickness=1, colorR=(255, 0, 0))
+            # Draw bounding box and label on the image
+            label = f"{target_class}: {conf}"
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+            detections.append({
+                "label": 'damage',
+                "confidence": conf,
+                "bbox": [x1, y1, x2, y2]
+            })
 
 # Ensure the 'outputs' directory exists
 output_dir = "outputs"
@@ -42,13 +63,6 @@ output_image_path = os.path.join(output_dir, f"{image_name}_output.jpg")
 # Save the image with detections
 cv2.imwrite(output_image_path, img)
 
-# Display the image with detections
-cv2.imshow("Image", img)
-
-# Close window when 'q' button is pressed
-while True:
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-cv2.destroyAllWindows()
-cv2.waitKey(1)
+# Only print the JSON response, ensuring no extra data is printed
+json_output = json.dumps({"detections": detections, "output_image": output_image_path})
+print(json_output)
